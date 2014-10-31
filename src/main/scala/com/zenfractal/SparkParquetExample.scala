@@ -1,17 +1,18 @@
 package com.zenfractal
 
-import parquet.hadoop.{ParquetOutputFormat, ParquetInputFormat}
-import spark.SparkContext
-import spark.SparkContext._
-import org.apache.hadoop.mapreduce.Job
-import parquet.avro.{AvroParquetOutputFormat, AvroWriteSupport, AvroReadSupport}
-import parquet.filter.{RecordFilter, UnboundRecordFilter}
-import java.lang.Iterable
-import parquet.column.ColumnReader
-import parquet.filter.ColumnRecordFilter._
-import parquet.filter.ColumnPredicates._
-import com.google.common.io.Files
 import java.io.File
+import java.lang.Iterable
+
+import com.google.common.io.Files
+import org.apache.hadoop.mapreduce.Job
+import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.SparkContext._
+import parquet.avro.{AvroParquetOutputFormat, AvroReadSupport, AvroWriteSupport}
+import parquet.column.ColumnReader
+import parquet.filter.ColumnPredicates._
+import parquet.filter.ColumnRecordFilter._
+import parquet.filter.{RecordFilter, UnboundRecordFilter}
+import parquet.hadoop.{ParquetInputFormat, ParquetOutputFormat}
 
 object SparkParquetExample {
 
@@ -28,7 +29,14 @@ object SparkParquetExample {
   }
 
   def main(args: Array[String]) {
-    val sc = new SparkContext("local", "ParquetExample")
+
+    val sparkConf = new SparkConf()
+      .setMaster("local")
+      .setAppName("ParquetExample")
+      .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+      .set("spark.kryo.registrator",  "com.zenfractal.AvroRegistrator")
+
+    val sc = new SparkContext(sparkConf)
     val job = new Job()
 
     val tempDir = Files.createTempDir()
@@ -53,22 +61,20 @@ object SparkParquetExample {
     // are reading them. The schema is saved in Parquet file for future readers to use.
     AvroParquetOutputFormat.setSchema(job, AminoAcid.SCHEMA$)
     // Create a PairRDD with all keys set to null and wrap each amino acid in serializable objects
-    val rdd = sc.makeRDD(essentialAminoAcids.map(acid => (null, new SerializableAminoAcid(acid))))
-    // Save the RDD to a Parquet file in our temporary output directory
-    rdd.saveAsNewAPIHadoopFile(outputDir, classOf[Void], classOf[AminoAcid],
-      classOf[ParquetOutputFormat[AminoAcid]], job.getConfiguration)
+    val rdd = sc.makeRDD(essentialAminoAcids.map(acid => (null, acid)))
+
+   // Save the RDD to a Parquet file in our temporary output directory
+    rdd.saveAsNewAPIHadoopFile(outputDir, classOf[Void], classOf[AminoAcid], classOf[ParquetOutputFormat[AminoAcid]], job.getConfiguration)
 
     // Read all the amino acids back to show that they were all saved to the Parquet file
     ParquetInputFormat.setReadSupportClass(job, classOf[AvroReadSupport[AminoAcid]])
-    val file = sc.newAPIHadoopFile(outputDir, classOf[ParquetInputFormat[AminoAcid]],
-      classOf[Void], classOf[AminoAcid], job.getConfiguration)
+    val file = sc.newAPIHadoopFile(outputDir, classOf[ParquetInputFormat[AminoAcid]], classOf[Void], classOf[AminoAcid], job.getConfiguration)
     file.foreach(aminoAcidPrinter)
 
     // Set a predicate and Parquet only deserializes amino acids that are basic.
     // Non-basic amino acids will returned as null.
     ParquetInputFormat.setUnboundRecordFilter(job, classOf[BasicAminoAcidPredicate])
-    val filteredFile = sc.newAPIHadoopFile(outputDir, classOf[ParquetInputFormat[AminoAcid]],
-      classOf[Void], classOf[AminoAcid], job.getConfiguration)
+    val filteredFile = sc.newAPIHadoopFile(outputDir, classOf[ParquetInputFormat[AminoAcid]], classOf[Void], classOf[AminoAcid], job.getConfiguration)
     filteredFile.foreach(aminoAcidPrinter)
   }
 

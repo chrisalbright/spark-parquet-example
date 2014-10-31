@@ -13,7 +13,7 @@ enum AminoAcidType {
 record AminoAcid {
  	AminoAcidType type;
 	string fullName;
-	string abbreviation;
+	union {null, string} abbreviation;
 	float molecularWeight;
 }
 
