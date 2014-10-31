@@ -57,6 +57,11 @@ object SparkParquetExample {
 
     // Configure the ParquetOutputFormat to use Avro as the serialization format
     ParquetOutputFormat.setWriteSupportClass(job, classOf[AvroWriteSupport])
+
+    // ParquetFileWriter has a check that is failing (falsely) in this example
+    // I created an issue for it: PARQUET-124 and have an open pull request
+    job.getConfiguration.setBoolean(ParquetOutputFormat.ENABLE_JOB_SUMMARY, false)
+
     // You need to pass the schema to AvroParquet when you are writing objects but not when you
     // are reading them. The schema is saved in Parquet file for future readers to use.
     AvroParquetOutputFormat.setSchema(job, AminoAcid.SCHEMA$)
